@@ -1,11 +1,12 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import {
   Upload, Download, FileText, FileJson,
-  RotateCcw, Edit3, X, AlertCircle, CheckCircle2, Type, Search,
+  RotateCcw, Edit3, X, AlertCircle, CheckCircle2, Type, Search, Languages,
   File as FileIcon, Loader2,   ChevronLeft, ChevronRight, ChevronUp, ChevronDown
 } from 'lucide-react';
 import * as pdfjsLib from 'pdfjs-dist';
 import { lexer, parser } from 'marked';
+import TranslateTool from './TranslateTool';
 
 const PRELOAD_COUNT = 3;
 const PDF_WORKER_URL = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString();
@@ -200,6 +201,8 @@ function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
   const [searchIdx, setSearchIdx] = useState(-1);
+  const [showTranslateTool, setShowTranslateTool] = useState(false);
+  const [translationMap, setTranslationMap] = useState(() => new Map());
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearchQuery(searchQuery), 500);
@@ -486,6 +489,19 @@ function App() {
     showToast('文字檔匯出成功', 'success');
   }, [pagesData, totalPages, edits, uid, showToast]);
 
+  const handleApplyTranslations = useCallback((mergedData) => {
+    setRawJson(mergedData);
+    try {
+      const parsed = parseOcrJson(mergedData);
+      setPagesData(parsed.pages);
+      setDataLoaded(true);
+      setShowTranslateTool(false);
+      showToast('翻譯已套用，雙語顯示中', 'success');
+    } catch (err) {
+      showToast(`套用失敗：${err.message}`);
+    }
+  }, [showToast]);
+
   const getBlockStyle = useCallback((blockUid) => {
     const base = 'cursor-pointer transition-all duration-150';
     const isHovered = hoveredUids.includes(blockUid);
@@ -600,7 +616,7 @@ function App() {
                   </div>
                 ) : (() => {
                   const displayText = debouncedSearchQuery && searchMatchSet.has(id)
-                    ? currentText.replace(new RegExp(searchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'), '<mark class="bg-amber-400/30 text-stone-100 rounded-sm px-0.5">$&</mark>')
+                    ? currentText.replace(new RegExp(debouncedSearchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'), '<mark class="bg-amber-400/30 text-stone-100 rounded-sm px-0.5">$&</mark>')
                     : currentText;
                   return (
                   <div className="flex items-center gap-1 group">
@@ -618,6 +634,15 @@ function App() {
                   </div>
                   );
                 })()}
+                {block.translated_text && (
+                  <>
+                    <div className="my-1.5 border-t border-stone-600/40" />
+                    <div className="flex items-start gap-1.5 text-xs text-emerald-400 leading-relaxed">
+                      <Languages size={12} className="mt-0.5 shrink-0" />
+                      <span>{block.translated_text}</span>
+                    </div>
+                  </>
+                )}
                 <div className="opacity-0 group-hover/item:opacity-100 transition-opacity duration-150 flex items-center gap-1.5 mb-1">
                   <span className="text-[10px] font-mono text-stone-500 bg-stone-800 px-1.5 py-0.5 rounded border border-stone-700">{block.block_label}</span>
                   {block.block_bbox && (
@@ -638,6 +663,15 @@ function App() {
   return (
     <div className="h-screen w-screen flex flex-col bg-stone-900 text-stone-200 overflow-hidden select-none">
       {toast && <Toast message={toast.message} type={toast.type} onClose={closeToast} />}
+      {showTranslateTool && (
+        <TranslateTool
+          rawJson={rawJson}
+          translationMap={translationMap}
+          setTranslationMap={setTranslationMap}
+          onApply={handleApplyTranslations}
+          onClose={() => setShowTranslateTool(false)}
+        />
+      )}
 
       <header className="h-14 flex items-center gap-3 px-5 border-b border-stone-700 bg-stone-800/50 shrink-0">
         <FileText size={22} className="text-indigo-400" />
@@ -685,6 +719,10 @@ function App() {
             <button onClick={handleExportTxt}
               className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium px-3 py-1.5 rounded-lg transition-colors h-8">
               <Type size={15} /> 匯出 TXT
+            </button>
+            <button onClick={() => setShowTranslateTool(true)}
+              className="flex items-center gap-1.5 bg-stone-700 hover:bg-stone-600 text-stone-200 text-xs font-medium px-3 py-1.5 rounded-lg transition-colors h-8">
+              <Languages size={15} /> 翻譯工具
             </button>
           </>
         )}
