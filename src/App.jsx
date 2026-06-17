@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
+import { useState, useRef, useCallback, useEffect, useMemo, memo } from 'react';
 import {
   Upload, Download, FileText, FileJson,
   RotateCcw, Edit3, X, AlertCircle, CheckCircle2, Type, Search, Languages,
@@ -69,7 +69,7 @@ async function renderPdfPageToBlob(pdfDoc, pageIndex, targetW, targetH) {
   return { url: URL.createObjectURL(blob), width: canvas.width, height: canvas.height };
 }
 
-function PageView({ pageIndex, pageData, pdfDoc, containerWidth, uploadImageUrl, sourceType, hoveredId, selectedId, onBboxHover, onBboxLeave, onBboxClick, getBlockStyle, preloadBound, onPageRendered, zoom }) {
+function PageView({ pageIndex, pageData, pdfDoc, containerWidth, uploadImageUrl, sourceType, hoveredUids, selectedUids, onBboxHover, onBboxLeave, onBboxClick, preloadBound, onPageRendered, zoom }) {
   const [imageUrl, setImageUrl] = useState(null);
   const [isLoaded, setIsLoaded] = useState(false);
   const divRef = useRef(null);
@@ -121,6 +121,16 @@ function PageView({ pageIndex, pageData, pdfDoc, containerWidth, uploadImageUrl,
 
   const wrappedW = displayW * zoom;
   const wrappedH = displayH * zoom;
+
+  const getBlockStyle = useCallback((blockUid) => {
+    const base = 'cursor-pointer transition-all duration-150';
+    const isHovered = hoveredUids.includes(blockUid);
+    const isSelected = selectedUids.includes(blockUid);
+    if (isHovered && isSelected) return `${base} stroke-amber-400 fill-amber-400/20 stroke-[2.5]`;
+    if (isSelected) return `${base} stroke-indigo-400 fill-indigo-400/20 stroke-[2.5]`;
+    if (isHovered) return `${base} stroke-amber-400 fill-amber-400/20 stroke-[2.5]`;
+    return `${base} stroke-none fill-transparent`;
+  }, [hoveredUids, selectedUids]);
 
   return (
     <div
@@ -178,6 +188,115 @@ function PageView({ pageIndex, pageData, pdfDoc, containerWidth, uploadImageUrl,
   );
 }
 
+const TextRow = memo(({ id, index, currentText, isEdited, isHtml, blockLabel, isHovered, isSelected, isSearchMatch, displayMode, translatedText, renderedHtml, searchQuery, onMouseEnter, onMouseLeave, onClick, onEditChange }) => {
+  const base = 'border-l-2 px-4 py-2 text-sm transition-all duration-150 cursor-pointer';
+  let cls = base;
+  if (isHovered && isSelected) cls += ' border-amber-400 bg-amber-400/10';
+  else if (isSelected) cls += ' border-indigo-400 bg-indigo-400/10';
+  else if (isHovered) cls += ' border-amber-400/60 bg-stone-700/50';
+  else if (isSearchMatch) cls += ' border-amber-500/40 bg-amber-400/5';
+  else cls += ' border-transparent hover:bg-stone-800/50';
+
+  return (
+    <div className={`${cls} group/item relative`}
+      data-uid={id}
+      onMouseEnter={() => onMouseEnter(id)}
+      onMouseLeave={onMouseLeave}
+      onClick={() => onClick(id)}
+    >
+      <div className="flex items-start gap-1.5">
+        <span className="text-[10px] text-stone-500 font-mono mt-1 w-5 shrink-0 text-right">{index}</span>
+        <div className="flex-1 min-w-0">
+          {displayMode !== 'translation' && (
+            <>
+              {isHtml ? (
+                (() => {
+                  switch (blockLabel) {
+                    case 'image':
+                    case 'header_image':
+                      return (
+                        <div className="flex items-center gap-2 bg-stone-700/30 border border-stone-600/50 rounded px-3 py-4">
+                          <span className="text-xs text-stone-500">[image]</span>
+                        </div>
+                      );
+                    case 'table':
+                      return (
+                        <div className="bg-stone-700/30 border border-stone-600/50 rounded overflow-x-auto">
+                          <div className="px-2 py-1 text-[10px] text-stone-500 bg-stone-700/50 border-b border-stone-600/50">table</div>
+                          <div className="p-2 text-xs [&_table]:w-full [&_table]:border-collapse [&_td]:border [&_td]:border-stone-600 [&_td]:px-2 [&_td]:py-1 [&_th]:border [&_th]:border-stone-600 [&_th]:px-2 [&_th]:py-1" dangerouslySetInnerHTML={{ __html: currentText }} />
+                        </div>
+                      );
+                    default:
+                      return (
+                        <div className="flex items-center gap-2 bg-stone-700/30 border border-stone-600/50 rounded px-3 py-4">
+                          <span className="text-xs text-stone-500">[{blockLabel}]</span>
+                        </div>
+                      );
+                  }
+                })()
+              ) : isEdited ? (
+                <div className="flex items-center gap-1">
+                  <input
+                    className="w-full bg-stone-700 border border-stone-600 rounded px-2 py-1 text-xs text-stone-100 outline-none focus:border-indigo-500 transition-colors"
+                    value={currentText}
+                    onChange={e => onEditChange(id, e.target.value)}
+                    onClick={e => e.stopPropagation()}
+                  />
+                  <button
+                    onClick={e => { e.stopPropagation(); onEditChange(id, null); }}
+                    className="text-stone-500 hover:text-red-400 shrink-0"
+                    title="還原"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-1 group">
+                  <span
+                    className="flex-1 leading-relaxed mark-up [&_h1]:text-lg [&_h1]:font-bold [&_h1]:text-stone-100 [&_h2]:text-base [&_h2]:font-bold [&_h2]:text-stone-100 [&_h3]:text-sm [&_h3]:font-bold [&_h3]:text-stone-100 [&_h4]:text-xs [&_h4]:font-bold [&_h4]:text-stone-200 [&_h5]:text-xs [&_h5]:font-semibold [&_h5]:text-stone-200 [&_h6]:text-xs [&_h6]:font-semibold [&_h6]:text-stone-300 [&_p]:m-0 [&_p]:inline [&_strong]:font-semibold [&_strong]:text-stone-100 [&_em]:italic [&_code]:bg-stone-700 [&_code]:px-1 [&_code]:rounded [&_code]:text-[10px] [&_pre]:bg-stone-700 [&_pre]:p-2 [&_pre]:rounded [&_pre]:overflow-x-auto [&_pre]:my-1 [&_ul]:list-disc [&_ul]:pl-4 [&_ol]:list-decimal [&_ol]:pl-4 [&_li]:my-0.5 [&_a]:text-indigo-400 [&_a]:underline [&_blockquote]:border-l-2 [&_blockquote]:border-stone-500 [&_blockquote]:pl-2 [&_blockquote]:text-stone-400 [&_hr]:border-stone-600 [&_hr]:my-1"
+                    dangerouslySetInnerHTML={{
+                      __html: isSearchMatch && searchQuery
+                        ? parser(lexer(currentText.replace(
+                            new RegExp(searchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'),
+                            '<mark class="bg-amber-400/30 text-stone-100 rounded-sm px-0.5">$&</mark>'
+                          )))
+                        : (renderedHtml.get(id) ?? currentText)
+                    }}
+                  />
+                  <button
+                    onClick={e => { e.stopPropagation(); onEditChange(id, currentText); }}
+                    className="text-stone-600 hover:text-indigo-400 opacity-0 group-hover:opacity-100 transition-all shrink-0"
+                    title="編輯"
+                  >
+                    <Edit3 size={13} />
+                  </button>
+                </div>
+              )}
+            </>
+          )}
+          {displayMode !== 'original' && (
+            <>
+              {translatedText ? (
+                <>
+                  {displayMode === 'both' && <div className="my-1.5 border-t border-stone-600/40" />}
+                  <div className="text-xs leading-relaxed">
+                    <span
+                      className="flex-1 leading-relaxed text-emerald-400 [&_h1]:text-lg [&_h1]:font-bold [&_h1]:text-emerald-100 [&_h2]:text-base [&_h2]:font-bold [&_h2]:text-emerald-100 [&_h3]:text-sm [&_h3]:font-bold [&_h3]:text-emerald-100 [&_h4]:text-xs [&_h4]:font-bold [&_h4]:text-emerald-200 [&_h5]:text-xs [&_h5]:font-semibold [&_h5]:text-emerald-200 [&_h6]:text-xs [&_h6]:font-semibold [&_h6]:text-emerald-300 [&_p]:m-0 [&_p]:inline [&_p]:text-emerald-400 [&_strong]:font-semibold [&_strong]:text-emerald-100 [&_em]:italic [&_code]:bg-stone-800 [&_code]:px-1 [&_code]:rounded [&_code]:text-[10px] [&_pre]:bg-stone-800 [&_pre]:p-2 [&_pre]:rounded [&_pre]:overflow-x-auto [&_pre]:my-1 [&_pre]:text-emerald-300 [&_ul]:list-disc [&_ul]:pl-4 [&_ol]:list-decimal [&_ol]:pl-4 [&_li]:my-0.5 [&_li]:text-emerald-400 [&_a]:text-emerald-300 [&_a]:underline [&_blockquote]:border-l-2 [&_blockquote]:border-emerald-700 [&_blockquote]:pl-2 [&_blockquote]:text-emerald-400 [&_hr]:border-emerald-700 [&_hr]:my-1"
+                      dangerouslySetInnerHTML={{ __html: parser(lexer(translatedText)) }}
+                    />
+                  </div>
+                </>
+              ) : displayMode === 'translation' ? (
+                <div className="text-xs text-stone-500 italic py-0.5">無翻譯</div>
+              ) : null}
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+});
+
 function App() {
   const [imageFile, setImageFile] = useState(null);
   const [jsonFile, setJsonFile] = useState(null);
@@ -203,6 +322,7 @@ function App() {
   const [searchIdx, setSearchIdx] = useState(-1);
   const [showTranslateTool, setShowTranslateTool] = useState(false);
   const [translationMap, setTranslationMap] = useState(() => new Map());
+  const [displayMode, setDisplayMode] = useState('both');
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearchQuery(searchQuery), 500);
@@ -405,6 +525,33 @@ function App() {
     return () => el.removeEventListener('scroll', onScroll);
   }, [dataLoaded, totalPages, currentPage]);
 
+  useEffect(() => {
+    if (!dataLoaded) return;
+    const el = textListRef.current;
+    if (!el) return;
+    const onScroll = () => {
+      const containerTop = el.getBoundingClientRect().top;
+      let closestIdx = currentPage;
+      let closestDist = Infinity;
+      const rows = el.querySelectorAll('[data-uid]');
+      for (const row of rows) {
+        const pageStr = row.getAttribute('data-uid')?.split(':')[0];
+        if (pageStr == null) continue;
+        const pageIdx = parseInt(pageStr, 10);
+        if (isNaN(pageIdx)) continue;
+        const rect = row.getBoundingClientRect();
+        const dist = Math.abs(rect.top - containerTop);
+        if (dist < closestDist) {
+          closestDist = dist;
+          closestIdx = pageIdx;
+        }
+      }
+      if (closestIdx !== currentPage) setCurrentPage(closestIdx);
+    };
+    el.addEventListener('scroll', onScroll, { passive: true });
+    return () => el.removeEventListener('scroll', onScroll);
+  }, [dataLoaded, currentPage]);
+
   const handleBboxHover = useCallback((block, e, pageIndex) => {
     setHoveredId(uid(pageIndex, block.block_id));
   }, [uid]);
@@ -432,7 +579,7 @@ function App() {
       if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
     const row = textListRef.current?.querySelector(`[data-uid="${id}"]`);
-    if (row) row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    if (row) row.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }, []);
 
   const handleEditChange = useCallback((id, text) => {
@@ -502,16 +649,6 @@ function App() {
     }
   }, [showToast]);
 
-  const getBlockStyle = useCallback((blockUid) => {
-    const base = 'cursor-pointer transition-all duration-150';
-    const isHovered = hoveredUids.includes(blockUid);
-    const isSelected = selectedUids.includes(blockUid);
-    if (isHovered && isSelected) return `${base} stroke-amber-400 fill-amber-400/20 stroke-[2.5]`;
-    if (isSelected) return `${base} stroke-indigo-400 fill-indigo-400/20 stroke-[2.5]`;
-    if (isHovered) return `${base} stroke-amber-400 fill-amber-400/20 stroke-[2.5]`;
-    return `${base} stroke-none fill-transparent`;
-  }, [hoveredUids, selectedUids]);
-
   const searchResults = useMemo(() => {
     if (!debouncedSearchQuery.trim()) return [];
     const q = debouncedSearchQuery.trim().toLowerCase();
@@ -529,19 +666,31 @@ function App() {
 
   const searchMatchSet = useMemo(() => new Set(searchResults), [searchResults]);
 
-  const getRowStyle = useCallback((blockUid) => {
-    const base = 'border-l-2 px-4 py-2 text-sm transition-all duration-150 cursor-pointer';
-    const isHovered = hoveredUids.includes(blockUid);
-    const isSelected = selectedUids.includes(blockUid);
-    const isSearchMatch = searchMatchSet.has(blockUid);
-    let cls = base;
-    if (isHovered && isSelected) cls += ' border-amber-400 bg-amber-400/10';
-    else if (isSelected) cls += ' border-indigo-400 bg-indigo-400/10';
-    else if (isHovered) cls += ' border-amber-400/60 bg-stone-700/50';
-    else if (debouncedSearchQuery && isSearchMatch) cls += ' border-amber-500/40 bg-amber-400/5';
-    else cls += ' border-transparent hover:bg-stone-800/50';
-    return cls;
-  }, [hoveredUids, selectedUids, searchMatchSet, debouncedSearchQuery]);
+  const renderedHtml = useMemo(() => {
+    const map = new Map();
+    for (let p = 0; p < totalPages; p++) {
+      for (const block of pagesData[p]?.blocks || []) {
+        if (!block.block_content || !block.block_content.trim()) continue;
+        const id = uid(p, block.block_id);
+        const text = edits[id] ?? block.block_content;
+        if (text.startsWith('<')) continue;
+        try { map.set(id, parser(lexer(text))); } catch { map.set(id, text); }
+      }
+    }
+    return map;
+  }, [pagesData, totalPages, uid, edits]);
+
+  const infoBlock = useMemo(() => {
+    const id = selectedId || hoveredId;
+    if (!id) return null;
+    const [pageStr, blockIdStr] = id.split(':');
+    const pageIdx = parseInt(pageStr, 10);
+    const blockId = parseInt(blockIdStr, 10);
+    if (isNaN(pageIdx) || isNaN(blockId)) return null;
+    const page = pagesData[pageIdx];
+    if (!page) return null;
+    return page.blocks.find(b => b.block_id === blockId) || null;
+  }, [selectedId, hoveredId, pagesData]);
 
   const renderSourceIcon = () => {
     if (sourceType === 'pdf') return <FileIcon size={15} className="text-red-400" />;
@@ -550,115 +699,55 @@ function App() {
 
   const rows = useMemo(() => {
     let globalIdx = 0;
+    let prevPage = -1;
     const r = [];
     for (let p = 0; p < totalPages; p++) {
       for (const block of pagesData[p]?.blocks || []) {
         if (!block.block_content || !block.block_content.trim()) continue;
         const id = uid(p, block.block_id);
-        const currentText = getCurrentText(block);
+        const currentText = edits[id] ?? block.block_content;
         const isEdited = edits[id] != null;
         const isHtml = block.block_content.trim().startsWith('<');
-        r.push(
-          <div
-            key={id}
-            data-uid={id}
-            className={`${getRowStyle(id)} group/item relative`}
-            onMouseEnter={() => handleTextHover(id)}
-            onMouseLeave={handleTextLeave}
-            onClick={() => handleTextClick(id)}
-          >
-            <div className="flex items-start gap-1.5">
-              <span className="text-[10px] text-stone-500 font-mono mt-1 w-5 shrink-0 text-right">
-                {++globalIdx}
-              </span>
-              <span className="text-[9px] font-mono text-indigo-400 bg-indigo-400/10 border border-indigo-400/20 rounded mt-1 px-1.5 py-[1px] shrink-0">{p + 1}</span>
-              <div className="flex-1 min-w-0">
-                {isHtml ? (
-                  (() => {
-                    switch (block.block_label) {
-                      case 'image':
-                      case 'header_image':
-                        return (
-                          <div className="flex items-center gap-2 bg-stone-700/30 border border-stone-600/50 rounded px-3 py-4">
-                            <span className="text-xs text-stone-500">[image]</span>
-                          </div>
-                        );
-                      case 'table':
-                        return (
-                          <div className="bg-stone-700/30 border border-stone-600/50 rounded overflow-x-auto">
-                            <div className="px-2 py-1 text-[10px] text-stone-500 bg-stone-700/50 border-b border-stone-600/50">table</div>
-                            <div className="p-2 text-xs [&_table]:w-full [&_table]:border-collapse [&_td]:border [&_td]:border-stone-600 [&_td]:px-2 [&_td]:py-1 [&_th]:border [&_th]:border-stone-600 [&_th]:px-2 [&_th]:py-1" dangerouslySetInnerHTML={{ __html: currentText }} />
-                          </div>
-                        );
-                      default:
-                        return (
-                          <div className="flex items-center gap-2 bg-stone-700/30 border border-stone-600/50 rounded px-3 py-4">
-                            <span className="text-xs text-stone-500">[{block.block_label}]</span>
-                          </div>
-                        );
-                    }
-                  })()
-                ) : isEdited ? (
-                  <div className="flex items-center gap-1">
-                    <input
-                      className="w-full bg-stone-700 border border-stone-600 rounded px-2 py-1 text-xs text-stone-100 outline-none focus:border-indigo-500 transition-colors"
-                      value={currentText}
-                      onChange={e => handleEditChange(id, e.target.value)}
-                      onClick={e => e.stopPropagation()}
-                    />
-                    <button
-                      onClick={e => { e.stopPropagation(); handleEditChange(id, null); }}
-                      className="text-stone-500 hover:text-red-400 shrink-0"
-                      title="還原"
-                    >
-                      <X size={14} />
-                    </button>
-                  </div>
-                ) : (() => {
-                  const displayText = debouncedSearchQuery && searchMatchSet.has(id)
-                    ? currentText.replace(new RegExp(debouncedSearchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'), '<mark class="bg-amber-400/30 text-stone-100 rounded-sm px-0.5">$&</mark>')
-                    : currentText;
-                  return (
-                  <div className="flex items-center gap-1 group">
-                    <span
-                      className="flex-1 leading-relaxed mark-up [&_h1]:text-lg [&_h1]:font-bold [&_h1]:text-stone-100 [&_h2]:text-base [&_h2]:font-bold [&_h2]:text-stone-100 [&_h3]:text-sm [&_h3]:font-bold [&_h3]:text-stone-100 [&_h4]:text-xs [&_h4]:font-bold [&_h4]:text-stone-200 [&_h5]:text-xs [&_h5]:font-semibold [&_h5]:text-stone-200 [&_h6]:text-xs [&_h6]:font-semibold [&_h6]:text-stone-300 [&_p]:m-0 [&_p]:inline [&_strong]:font-semibold [&_strong]:text-stone-100 [&_em]:italic [&_code]:bg-stone-700 [&_code]:px-1 [&_code]:rounded [&_code]:text-[10px] [&_pre]:bg-stone-700 [&_pre]:p-2 [&_pre]:rounded [&_pre]:overflow-x-auto [&_pre]:my-1 [&_ul]:list-disc [&_ul]:pl-4 [&_ol]:list-decimal [&_ol]:pl-4 [&_li]:my-0.5 [&_a]:text-indigo-400 [&_a]:underline [&_blockquote]:border-l-2 [&_blockquote]:border-stone-500 [&_blockquote]:pl-2 [&_blockquote]:text-stone-400 [&_hr]:border-stone-600 [&_hr]:my-1"
-                      dangerouslySetInnerHTML={{ __html: parser(lexer(displayText)) }}
-                    />
-                    <button
-                      onClick={e => { e.stopPropagation(); handleEditChange(id, currentText); }}
-                      className="text-stone-600 hover:text-indigo-400 opacity-0 group-hover:opacity-100 transition-all shrink-0"
-                      title="編輯"
-                    >
-                      <Edit3 size={13} />
-                    </button>
-                  </div>
-                  );
-                })()}
-                {block.translated_text && (
-                  <>
-                    <div className="my-1.5 border-t border-stone-600/40" />
-                    <div className="flex items-start gap-1.5 text-xs text-emerald-400 leading-relaxed">
-                      <Languages size={12} className="mt-0.5 shrink-0" />
-                      <span>{block.translated_text}</span>
-                    </div>
-                  </>
-                )}
-                <div className="opacity-0 group-hover/item:opacity-100 transition-opacity duration-150 flex items-center gap-1.5 mb-1">
-                  <span className="text-[10px] font-mono text-stone-500 bg-stone-800 px-1.5 py-0.5 rounded border border-stone-700">{block.block_label}</span>
-                  {block.block_bbox && (
-                    <span className="text-[10px] font-mono text-stone-600 bg-stone-800 px-1.5 py-0.5 rounded border border-stone-700">
-                      {Math.round(block.block_bbox[0])},{Math.round(block.block_bbox[1])}
-                    </span>
-                  )}
-                </div>
+        const isFirstOfPage = p !== prevPage;
+        if (isFirstOfPage) prevPage = p;
+        if (isFirstOfPage && p > 0) {
+          r.push(
+            <div key={`page-sep-${p}`} className="flex items-center gap-3 px-4 py-3 select-none">
+              <div className="flex-1 h-[2px] rounded-full bg-gradient-to-r from-transparent via-indigo-600/60 to-indigo-600/80" />
+              <div className="flex items-center gap-1.5 bg-indigo-600/15 border border-indigo-600/30 rounded-full px-3 py-0.5">
+                <FileText size={11} className="text-indigo-400" />
+                <span className="text-[11px] font-semibold font-mono text-indigo-300 tracking-wide">第 {p + 1} 頁</span>
               </div>
+              <div className="flex-1 h-[2px] rounded-full bg-gradient-to-l from-transparent via-indigo-600/60 to-indigo-600/80" />
             </div>
-          </div>
+          );
+        }
+        r.push(
+          <TextRow
+            key={id}
+            id={id}
+            index={++globalIdx}
+            currentText={currentText}
+            isEdited={isEdited}
+            isHtml={isHtml}
+            blockLabel={block.block_label}
+            isHovered={hoveredUids.includes(id)}
+            isSelected={selectedUids.includes(id)}
+            isSearchMatch={searchMatchSet.has(id)}
+            displayMode={displayMode}
+            translatedText={block.translated_text}
+            renderedHtml={renderedHtml}
+            searchQuery={debouncedSearchQuery}
+            onMouseEnter={handleTextHover}
+            onMouseLeave={handleTextLeave}
+            onClick={handleTextClick}
+            onEditChange={handleEditChange}
+          />
         );
       }
     }
     return r;
-  }, [pagesData, totalPages, uid, edits, getCurrentText, getRowStyle, handleTextHover, handleTextLeave, handleTextClick, handleEditChange, searchMatchSet, debouncedSearchQuery]);
+  }, [pagesData, totalPages, uid, edits, hoveredUids, selectedUids, searchMatchSet, displayMode, handleTextHover, handleTextLeave, handleTextClick, handleEditChange, renderedHtml, debouncedSearchQuery]);
 
   return (
     <div className="h-screen w-screen flex flex-col bg-stone-900 text-stone-200 overflow-hidden select-none">
@@ -765,13 +854,14 @@ function App() {
                   containerWidth={containerWidth}
                   uploadImageUrl={imageUrl}
                   sourceType={sourceType}
-                  hoveredId={hoveredId}
-                  selectedId={selectedId}
-                  onBboxHover={handleBboxHover}
-                  onBboxLeave={handleBboxLeave}
-                  onBboxClick={handleBboxClick}
-                  getBlockStyle={getBlockStyle}
-                  preloadBound={preloadBound}
+                   hoveredId={hoveredId}
+                   selectedId={selectedId}
+                   hoveredUids={hoveredUids}
+                   selectedUids={selectedUids}
+                   onBboxHover={handleBboxHover}
+                   onBboxLeave={handleBboxLeave}
+                   onBboxClick={handleBboxClick}
+                   preloadBound={preloadBound}
                   onPageRendered={handlePageRendered}
                   zoom={zoom}
                 />
@@ -860,6 +950,24 @@ function App() {
                 文字列表
                 <span className="ml-2 text-stone-600">({allTextBlocks.length} 行)</span>
               </span>
+              <div className="flex items-center gap-1.5 bg-indigo-600/15 border border-indigo-600/25 text-indigo-300 rounded px-1.5 py-0.5 text-[10px] font-medium shrink-0">
+                <FileText size={11} />
+                <span>第 {currentPage + 1} / {totalPages} 頁</span>
+              </div>
+              <div className="flex items-center gap-0.5 bg-stone-700/50 border border-stone-600/40 rounded-lg p-0.5 shrink-0">
+                <button
+                  onClick={() => setDisplayMode('original')}
+                  className={`px-2 py-0.5 text-[10px] font-medium rounded-md transition-colors ${displayMode === 'original' ? 'bg-indigo-600 text-white shadow-sm' : 'text-stone-400 hover:text-stone-200'}`}
+                >原文</button>
+                <button
+                  onClick={() => setDisplayMode('both')}
+                  className={`px-2 py-0.5 text-[10px] font-medium rounded-md transition-colors ${displayMode === 'both' ? 'bg-indigo-600 text-white shadow-sm' : 'text-stone-400 hover:text-stone-200'}`}
+                >雙語</button>
+                <button
+                  onClick={() => setDisplayMode('translation')}
+                  className={`px-2 py-0.5 text-[10px] font-medium rounded-md transition-colors ${displayMode === 'translation' ? 'bg-indigo-600 text-white shadow-sm' : 'text-stone-400 hover:text-stone-200'}`}
+                >翻譯</button>
+              </div>
               <div className="flex-1" />
               <span className="text-[10px] text-stone-500">懸停/點擊可雙向同步</span>
             </div>
@@ -921,6 +1029,26 @@ function App() {
 
             <div ref={textListRef} className="flex-1 overflow-y-auto scroll-smooth">
               {rows}
+            </div>
+            <div className="h-7 shrink-0 flex items-center gap-2 px-3 border-t border-stone-700 bg-stone-800/40 text-[10px] font-mono">
+              {infoBlock ? (
+                <>
+                  <span className="text-stone-400">label:</span>
+                  <span className="text-stone-200 font-semibold">{infoBlock.block_label}</span>
+                  {infoBlock.block_bbox && (
+                    <>
+                      <span className="text-stone-600">|</span>
+                      <span className="text-stone-400">pos:</span>
+                      <span className="text-stone-200">{Math.round(infoBlock.block_bbox[0])},{Math.round(infoBlock.block_bbox[1])}</span>
+                    </>
+                  )}
+                  <span className="text-stone-600">|</span>
+                  <span className="text-stone-400">id:</span>
+                  <span className="text-stone-500">{infoBlock.block_id}</span>
+                </>
+              ) : (
+                <span className="text-stone-600 italic">懸停或選取區塊以查看詳細資訊</span>
+              )}
             </div>
           </aside>
         )}
