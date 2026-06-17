@@ -1,8 +1,8 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import {
   Upload, Download, FileText, FileJson,
-  RotateCcw, Edit3, X, AlertCircle, CheckCircle2, Type,
-  File as FileIcon, Loader2, ChevronLeft, ChevronRight
+  RotateCcw, Edit3, X, AlertCircle, CheckCircle2, Type, Search,
+  File as FileIcon, Loader2,   ChevronLeft, ChevronRight, ChevronUp, ChevronDown
 } from 'lucide-react';
 import * as pdfjsLib from 'pdfjs-dist';
 import { lexer, parser } from 'marked';
@@ -197,6 +197,14 @@ function App() {
   const [currentPage, setCurrentPage] = useState(0);
   const [zoom, setZoom] = useState(1);
   const [isAutoFit, setIsAutoFit] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
+  const [searchIdx, setSearchIdx] = useState(-1);
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearchQuery(searchQuery), 500);
+    return () => clearTimeout(t);
+  }, [searchQuery]);
 
   const handlePageRendered = useCallback((pageIndex) => {
     setPreloadBound(prev => Math.min(Math.max(prev, pageIndex + PRELOAD_COUNT), pagesData.length - 1));
@@ -420,6 +428,8 @@ function App() {
       const el = scrollRef.current?.querySelector(`[data-page-index="${pageIndex}"]`);
       if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
+    const row = textListRef.current?.querySelector(`[data-uid="${id}"]`);
+    if (row) row.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }, []);
 
   const handleEditChange = useCallback((id, text) => {
@@ -486,15 +496,36 @@ function App() {
     return `${base} stroke-none fill-transparent`;
   }, [hoveredUids, selectedUids]);
 
+  const searchResults = useMemo(() => {
+    if (!debouncedSearchQuery.trim()) return [];
+    const q = debouncedSearchQuery.trim().toLowerCase();
+    const res = [];
+    for (let p = 0; p < totalPages; p++) {
+      for (const block of pagesData[p]?.blocks || []) {
+        if (!block.block_content || !block.block_content.trim()) continue;
+        const id = uid(p, block.block_id);
+        const text = getCurrentText(block).toLowerCase();
+        if (text.includes(q)) res.push(id);
+      }
+    }
+    return res;
+  }, [debouncedSearchQuery, pagesData, totalPages, uid, getCurrentText]);
+
+  const searchMatchSet = useMemo(() => new Set(searchResults), [searchResults]);
+
   const getRowStyle = useCallback((blockUid) => {
     const base = 'border-l-2 px-4 py-2 text-sm transition-all duration-150 cursor-pointer';
     const isHovered = hoveredUids.includes(blockUid);
     const isSelected = selectedUids.includes(blockUid);
-    if (isHovered && isSelected) return `${base} border-amber-400 bg-amber-400/10`;
-    if (isSelected) return `${base} border-indigo-400 bg-indigo-400/10`;
-    if (isHovered) return `${base} border-amber-400/60 bg-stone-700/50`;
-    return `${base} border-transparent hover:bg-stone-800/50`;
-  }, [hoveredUids, selectedUids]);
+    const isSearchMatch = searchMatchSet.has(blockUid);
+    let cls = base;
+    if (isHovered && isSelected) cls += ' border-amber-400 bg-amber-400/10';
+    else if (isSelected) cls += ' border-indigo-400 bg-indigo-400/10';
+    else if (isHovered) cls += ' border-amber-400/60 bg-stone-700/50';
+    else if (debouncedSearchQuery && isSearchMatch) cls += ' border-amber-500/40 bg-amber-400/5';
+    else cls += ' border-transparent hover:bg-stone-800/50';
+    return cls;
+  }, [hoveredUids, selectedUids, searchMatchSet, debouncedSearchQuery]);
 
   const renderSourceIcon = () => {
     if (sourceType === 'pdf') return <FileIcon size={15} className="text-red-400" />;
@@ -567,11 +598,15 @@ function App() {
                       <X size={14} />
                     </button>
                   </div>
-                ) : (
+                ) : (() => {
+                  const displayText = debouncedSearchQuery && searchMatchSet.has(id)
+                    ? currentText.replace(new RegExp(searchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'), '<mark class="bg-amber-400/30 text-stone-100 rounded-sm px-0.5">$&</mark>')
+                    : currentText;
+                  return (
                   <div className="flex items-center gap-1 group">
                     <span
-                      className="flex-1 leading-relaxed [&_h1]:text-lg [&_h1]:font-bold [&_h1]:text-stone-100 [&_h2]:text-base [&_h2]:font-bold [&_h2]:text-stone-100 [&_h3]:text-sm [&_h3]:font-bold [&_h3]:text-stone-100 [&_h4]:text-xs [&_h4]:font-bold [&_h4]:text-stone-200 [&_h5]:text-xs [&_h5]:font-semibold [&_h5]:text-stone-200 [&_h6]:text-xs [&_h6]:font-semibold [&_h6]:text-stone-300 [&_p]:m-0 [&_p]:inline [&_strong]:font-semibold [&_strong]:text-stone-100 [&_em]:italic [&_code]:bg-stone-700 [&_code]:px-1 [&_code]:rounded [&_code]:text-[10px] [&_pre]:bg-stone-700 [&_pre]:p-2 [&_pre]:rounded [&_pre]:overflow-x-auto [&_pre]:my-1 [&_ul]:list-disc [&_ul]:pl-4 [&_ol]:list-decimal [&_ol]:pl-4 [&_li]:my-0.5 [&_a]:text-indigo-400 [&_a]:underline [&_blockquote]:border-l-2 [&_blockquote]:border-stone-500 [&_blockquote]:pl-2 [&_blockquote]:text-stone-400 [&_hr]:border-stone-600 [&_hr]:my-1"
-                      dangerouslySetInnerHTML={{ __html: parser(lexer(currentText)) }}
+                      className="flex-1 leading-relaxed mark-up [&_h1]:text-lg [&_h1]:font-bold [&_h1]:text-stone-100 [&_h2]:text-base [&_h2]:font-bold [&_h2]:text-stone-100 [&_h3]:text-sm [&_h3]:font-bold [&_h3]:text-stone-100 [&_h4]:text-xs [&_h4]:font-bold [&_h4]:text-stone-200 [&_h5]:text-xs [&_h5]:font-semibold [&_h5]:text-stone-200 [&_h6]:text-xs [&_h6]:font-semibold [&_h6]:text-stone-300 [&_p]:m-0 [&_p]:inline [&_strong]:font-semibold [&_strong]:text-stone-100 [&_em]:italic [&_code]:bg-stone-700 [&_code]:px-1 [&_code]:rounded [&_code]:text-[10px] [&_pre]:bg-stone-700 [&_pre]:p-2 [&_pre]:rounded [&_pre]:overflow-x-auto [&_pre]:my-1 [&_ul]:list-disc [&_ul]:pl-4 [&_ol]:list-decimal [&_ol]:pl-4 [&_li]:my-0.5 [&_a]:text-indigo-400 [&_a]:underline [&_blockquote]:border-l-2 [&_blockquote]:border-stone-500 [&_blockquote]:pl-2 [&_blockquote]:text-stone-400 [&_hr]:border-stone-600 [&_hr]:my-1"
+                      dangerouslySetInnerHTML={{ __html: parser(lexer(displayText)) }}
                     />
                     <button
                       onClick={e => { e.stopPropagation(); handleEditChange(id, currentText); }}
@@ -581,7 +616,8 @@ function App() {
                       <Edit3 size={13} />
                     </button>
                   </div>
-                )}
+                  );
+                })()}
                 <div className="opacity-0 group-hover/item:opacity-100 transition-opacity duration-150 flex items-center gap-1.5 mb-1">
                   <span className="text-[10px] font-mono text-stone-500 bg-stone-800 px-1.5 py-0.5 rounded border border-stone-700">{block.block_label}</span>
                   {block.block_bbox && (
@@ -597,7 +633,7 @@ function App() {
       }
     }
     return r;
-  }, [pagesData, totalPages, uid, edits, getCurrentText, getRowStyle, handleTextHover, handleTextLeave, handleTextClick]);
+  }, [pagesData, totalPages, uid, edits, getCurrentText, getRowStyle, handleTextHover, handleTextLeave, handleTextClick, handleEditChange, searchMatchSet, debouncedSearchQuery]);
 
   return (
     <div className="h-screen w-screen flex flex-col bg-stone-900 text-stone-200 overflow-hidden select-none">
@@ -786,8 +822,65 @@ function App() {
                 文字列表
                 <span className="ml-2 text-stone-600">({allTextBlocks.length} 行)</span>
               </span>
+              <div className="flex-1" />
               <span className="text-[10px] text-stone-500">懸停/點擊可雙向同步</span>
             </div>
+
+            <div className="flex items-center gap-1.5 px-3 py-1.5 border-b border-stone-700 shrink-0">
+              <div className="flex items-center gap-1 flex-1 bg-stone-700/50 border border-stone-600 rounded px-2 py-1">
+                <Search size={13} className="text-stone-500 shrink-0" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={e => { setSearchQuery(e.target.value); setSearchIdx(-1); }}
+                  placeholder="搜尋區塊文字..."
+                  className="flex-1 bg-transparent text-xs text-stone-100 outline-none placeholder:text-stone-500 min-w-0"
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' && searchResults.length > 0) {
+                      e.preventDefault();
+                      const nextIdx = searchIdx + 1 >= searchResults.length ? 0 : searchIdx + 1;
+                      setSearchIdx(nextIdx);
+                      handleTextClick(searchResults[nextIdx]);
+                    }
+                  }}
+                />
+                {searchQuery && (
+                  <button onClick={() => { setSearchQuery(''); setDebouncedSearchQuery(''); setSearchIdx(-1); }} className="text-stone-500 hover:text-stone-300 shrink-0">
+                    <X size={13} />
+                  </button>
+                )}
+              </div>
+              {searchResults.length > 0 && (
+                <>
+                  <button
+                    onClick={() => {
+                      const prev = searchIdx <= 0 ? searchResults.length - 1 : searchIdx - 1;
+                      setSearchIdx(prev);
+                      handleTextClick(searchResults[prev]);
+                    }}
+                    className="text-stone-500 hover:text-stone-200 disabled:opacity-30 shrink-0"
+                    title="上一個"
+                  >
+                    <ChevronUp size={14} />
+                  </button>
+                  <button
+                    onClick={() => {
+                      const next = searchIdx + 1 >= searchResults.length ? 0 : searchIdx + 1;
+                      setSearchIdx(next);
+                      handleTextClick(searchResults[next]);
+                    }}
+                    className="text-stone-500 hover:text-stone-200 disabled:opacity-30 shrink-0"
+                    title="下一個"
+                  >
+                    <ChevronDown size={14} />
+                  </button>
+                  <span className="text-[10px] font-mono text-stone-500 shrink-0 whitespace-nowrap">
+                    {searchIdx >= 0 ? `${searchIdx + 1}/${searchResults.length}` : `${searchResults.length} 筆`}
+                  </span>
+                </>
+              )}
+            </div>
+
             <div ref={textListRef} className="flex-1 overflow-y-auto scroll-smooth">
               {rows}
             </div>
