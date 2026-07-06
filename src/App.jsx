@@ -341,7 +341,7 @@ function App() {
   const [availableDatasets, setAvailableDatasets] = useState([]);
 
   useEffect(() => {
-    fetch('/manifest.json')
+    fetch(`${import.meta.env.BASE_URL}manifest.json`)
       .then(r => r.json())
       .then(data => setAvailableDatasets(Array.isArray(data) ? data : []))
       .catch(() => {});
