@@ -1,8 +1,8 @@
 import { useState, useRef, useCallback, useEffect, useMemo, memo } from 'react';
 import {
   Upload, Download, FileText, FileJson,
-  RotateCcw, Edit3, X, AlertCircle, CheckCircle2, Type, Search, Languages,
-  File as FileIcon, Loader2,   ChevronLeft, ChevronRight, ChevronUp, ChevronDown
+  RotateCcw, Copy, Edit3, X, AlertCircle, CheckCircle2, Type, Search, Languages,
+  File as FileIcon, Loader2,   ChevronLeft, ChevronRight,   ChevronUp, ChevronDown, MoreHorizontal
 } from 'lucide-react';
 import * as pdfjsLib from 'pdfjs-dist';
 import { lexer, parser, use as markedUse } from 'marked';
@@ -35,7 +35,7 @@ function Toast({ message, type, onClose }) {
   const bg = type === 'error' ? 'bg-red-600' : 'bg-emerald-600';
   const Icon = type === 'error' ? AlertCircle : CheckCircle2;
   return (
-    <div className={`fixed bottom-6 right-6 z-[9999] flex items-center gap-3 ${bg} text-white px-5 py-3 rounded-xl shadow-2xl shadow-black/40 animate-slide-up`}>
+    <div className={`fixed z-[9999] flex items-center gap-3 ${bg} text-white px-5 py-3 rounded-xl shadow-2xl shadow-black/40 animate-slide-up max-md:top-4 max-md:left-1/2 max-md:-translate-x-1/2 max-md:bottom-auto md:bottom-6 md:right-6`}>
       <Icon size={20} />
       <span className="text-sm font-medium">{message}</span>
       <button onClick={onClose} className="ml-2 hover:text-white/70"><X size={16} /></button>
@@ -84,7 +84,7 @@ async function renderPdfPageToBlob(pdfDoc, pageIndex, targetW, targetH) {
   return { url: URL.createObjectURL(blob), width: canvas.width, height: canvas.height };
 }
 
-function PageView({ pageIndex, pageData, pdfDoc, containerWidth, uploadImageUrl, sourceType, hoveredUids, selectedUids, onBboxHover, onBboxLeave, onBboxClick, preloadBound, onPageRendered, zoom }) {
+function PageView({ pageIndex, pageData, pdfDoc, containerWidth, uploadImageUrl, sourceType, hoveredUids, selectedUids, onBboxHover, onBboxLeave, onBboxClick, preloadBound, onPageRendered, zoom, onCopy }) {
   const [imageUrl, setImageUrl] = useState(null);
   const [isLoaded, setIsLoaded] = useState(false);
   const divRef = useRef(null);
@@ -92,6 +92,18 @@ function PageView({ pageIndex, pageData, pdfDoc, containerWidth, uploadImageUrl,
   const isImageMode = sourceType === 'image';
   const displayW = containerWidth;
   const displayH = displayW * (pageData.height / pageData.width);
+
+  const selectedBlock = useMemo(() => {
+    if (!selectedUids || selectedUids.length === 0) return null;
+    const prefix = `${pageIndex}:`;
+    for (const uid of selectedUids) {
+      if (uid.startsWith(prefix)) {
+        const blockId = Number(uid.slice(prefix.length));
+        return pageData.blocks.find(b => b.block_id === blockId) || null;
+      }
+    }
+    return null;
+  }, [selectedUids, pageIndex, pageData.blocks]);
 
   useEffect(() => {
     if (isImageMode && uploadImageUrl && pageIndex === 0) {
@@ -199,11 +211,28 @@ function PageView({ pageIndex, pageData, pdfDoc, containerWidth, uploadImageUrl,
           </div>
         )}
       </div>
+      {selectedBlock && selectedBlock.block_content && (() => {
+        const pts = selectedBlock.block_polygon_points;
+        const sx = displayW / pageData.width;
+        const sy = displayH / pageData.height;
+        const maxX = Math.max(pts[0][0], pts[1][0], pts[2][0], pts[3][0]);
+        const minY = Math.min(pts[0][1], pts[1][1], pts[2][1], pts[3][1]);
+        return (
+          <button
+            onClick={e => { e.stopPropagation(); onCopy(selectedBlock.block_content); }}
+            className="absolute z-10 bg-stone-800/85 hover:bg-stone-700 text-stone-300 hover:text-emerald-400 rounded-lg p-1.5 transition-all shadow-lg shadow-black/40"
+            style={{ left: maxX * sx * zoom + 8, top: minY * sy * zoom }}
+            title="複製文字"
+          >
+            <Copy size={14} />
+          </button>
+        );
+      })()}
     </div>
   );
 }
 
-const TextRow = memo(({ id, index, currentText, isEdited, isHtml, blockLabel, isHovered, isSelected, isSearchMatch, displayMode, translatedText, renderedHtml, searchQuery, onMouseEnter, onMouseLeave, onClick, onEditChange }) => {
+const TextRow = memo(({ id, index, currentText, isEdited, isHtml, blockLabel, isHovered, isSelected, isSearchMatch, displayMode, translatedText, renderedHtml, searchQuery, onMouseEnter, onMouseLeave, onClick, onEditChange, onCopy }) => {
   const base = 'border-l-2 px-4 py-2 text-sm transition-all duration-150 cursor-pointer';
   let cls = base;
   if (isHovered && isSelected) cls += ' border-amber-400 bg-amber-400/10';
@@ -279,8 +308,15 @@ const TextRow = memo(({ id, index, currentText, isEdited, isHtml, blockLabel, is
                     }}
                   />
                   <button
+                    onClick={e => { e.stopPropagation(); onCopy(currentText); }}
+                    className="text-stone-600 hover:text-emerald-400 opacity-0 group-hover:opacity-100 max-md:opacity-100 transition-all shrink-0"
+                    title="複製"
+                  >
+                    <Copy size={13} />
+                  </button>
+                  <button
                     onClick={e => { e.stopPropagation(); onEditChange(id, currentText); }}
-                    className="text-stone-600 hover:text-indigo-400 opacity-0 group-hover:opacity-100 transition-all shrink-0"
+                    className="text-stone-600 hover:text-indigo-400 opacity-0 group-hover:opacity-100 max-md:opacity-100 transition-all shrink-0"
                     title="編輯"
                   >
                     <Edit3 size={13} />
@@ -339,6 +375,8 @@ function App() {
   const [translationMap, setTranslationMap] = useState(() => new Map());
   const [displayMode, setDisplayMode] = useState('both');
   const [availableDatasets, setAvailableDatasets] = useState([]);
+  const [mobileTab, setMobileTab] = useState('image');
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
 
   useEffect(() => {
     fetch(`${import.meta.env.BASE_URL}manifest.json`)
@@ -352,6 +390,21 @@ function App() {
     return () => clearTimeout(t);
   }, [searchQuery]);
 
+  useEffect(() => {
+    if (!showMoreMenu) return;
+    const handler = (e) => {
+      if (moreMenuRef.current && !moreMenuRef.current.contains(e.target)) {
+        setShowMoreMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    document.addEventListener('touchstart', handler);
+    return () => {
+      document.removeEventListener('mousedown', handler);
+      document.removeEventListener('touchstart', handler);
+    };
+  }, [showMoreMenu]);
+
   const handlePageRendered = useCallback((pageIndex) => {
     setPreloadBound(prev => Math.min(Math.max(prev, pageIndex + PRELOAD_COUNT), pagesData.length - 1));
   }, [pagesData.length]);
@@ -361,8 +414,18 @@ function App() {
   const imgInputRef = useRef(null);
   const jsonInputRef = useRef(null);
   const pdfProcessedRef = useRef(false);
+  const moreMenuRef = useRef(null);
+  const savedScrollTop = useRef(0);
 
   const showToast = useCallback((message, type = 'error') => setToast({ message, type }), []);
+  const handleCopy = useCallback(async (text) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      showToast('已複製到剪貼簿', 'success');
+    } catch {
+      showToast('複製失敗');
+    }
+  }, [showToast]);
   const closeToast = useCallback(() => setToast(null), []);
 
   const loadFromManifest = useCallback(async (entry) => {
@@ -523,12 +586,15 @@ function App() {
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
-    const updateWidth = () => setContainerWidth(el.clientWidth);
+    const updateWidth = () => {
+      const w = el.clientWidth;
+      if (w > 0) setContainerWidth(w);
+    };
     updateWidth();
     const ro = new ResizeObserver(updateWidth);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [dataLoaded]);
+  }, [dataLoaded, mobileTab]);
 
   useEffect(() => {
     if (!dataLoaded || !containerWidth || pagesData.length === 0) return;
@@ -558,6 +624,44 @@ function App() {
     el.addEventListener('wheel', handler, { passive: false });
     return () => el.removeEventListener('wheel', handler);
   }, []);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    let lastDist = 0;
+    const onTouchMove = (e) => {
+      if (e.touches.length === 2) {
+        e.preventDefault();
+        const t = e.touches;
+        const dx = t[0].clientX - t[1].clientX;
+        const dy = t[0].clientY - t[1].clientY;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (lastDist > 0) {
+          const ratio = dist / lastDist;
+          setIsAutoFit(false);
+          setZoom(prev => Math.max(0.25, Math.min(5, prev * ratio)));
+        }
+        lastDist = dist;
+      } else {
+        lastDist = 0;
+      }
+    };
+    el.addEventListener('touchmove', onTouchMove, { passive: false });
+    return () => el.removeEventListener('touchmove', onTouchMove);
+  }, []);
+
+  const handleMobileTabChange = useCallback((tab) => {
+    if (tab !== 'image' && mobileTab === 'image' && scrollRef.current) {
+      savedScrollTop.current = scrollRef.current.scrollTop;
+    }
+    setMobileTab(tab);
+  }, [mobileTab]);
+
+  useEffect(() => {
+    if (mobileTab === 'image' && scrollRef.current) {
+      scrollRef.current.scrollTop = savedScrollTop.current;
+    }
+  }, [mobileTab]);
 
   useEffect(() => {
     if (!dataLoaded || totalPages === 0) return;
@@ -800,6 +904,7 @@ function App() {
             onMouseLeave={handleTextLeave}
             onClick={handleTextClick}
             onEditChange={handleEditChange}
+            onCopy={handleCopy}
           />
         );
       }
@@ -820,10 +925,10 @@ function App() {
         />
       )}
 
-      <header className="h-14 flex items-center gap-3 px-5 border-b border-stone-700 bg-stone-800/50 shrink-0">
-        <FileText size={22} className="text-indigo-400" />
+      <header className="h-14 flex items-center gap-2 md:gap-3 px-3 md:px-5 border-b border-stone-700 bg-stone-800/50 shrink-0">
+        <FileText size={20} className="text-indigo-400 shrink-0" />
         <h1 className="text-base font-semibold tracking-tight">RN Codex</h1>
-        <div className="w-px h-6 bg-stone-700 mx-1" />
+        <div className="w-px h-6 bg-stone-700 mx-0.5 md:mx-1" />
 
         <input
           ref={imgInputRef}
@@ -834,10 +939,11 @@ function App() {
         />
         <button
           onClick={() => imgInputRef.current?.click()}
-          className="flex items-center gap-1.5 bg-stone-700 hover:bg-stone-600 text-stone-200 text-xs font-medium px-3 py-1.5 rounded-lg transition-colors h-8"
+          className="flex items-center gap-1 bg-stone-700 hover:bg-stone-600 text-stone-200 text-xs font-medium px-2 md:px-3 py-1.5 rounded-lg transition-colors h-8 shrink-0"
+          title="上傳圖片 / PDF"
         >
           {renderSourceIcon()}
-          {imageFile ? imageFile.name : '上傳圖片 / PDF'}
+          <span className="max-md:hidden">{imageFile ? imageFile.name : '上傳圖片 / PDF'}</span>
         </button>
 
         <input
@@ -849,10 +955,11 @@ function App() {
         />
         <button
           onClick={() => jsonInputRef.current?.click()}
-          className="flex items-center gap-1.5 bg-stone-700 hover:bg-stone-600 text-stone-200 text-xs font-medium px-3 py-1.5 rounded-lg transition-colors h-8"
+          className="flex items-center gap-1 bg-stone-700 hover:bg-stone-600 text-stone-200 text-xs font-medium px-2 md:px-3 py-1.5 rounded-lg transition-colors h-8 shrink-0"
+          title="上傳 OCR JSON"
         >
           <FileJson size={15} />
-          {jsonFile ? jsonFile.name : '上傳 OCR JSON'}
+          <span className="max-md:hidden">{jsonFile ? jsonFile.name : '上傳 OCR JSON'}</span>
         </button>
 
         <div className="flex-1" />
@@ -860,248 +967,312 @@ function App() {
         {dataLoaded && (
           <>
             <button onClick={handleExportJson}
-              className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium px-3 py-1.5 rounded-lg transition-colors h-8">
+              className="max-md:hidden flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium px-3 py-1.5 rounded-lg transition-colors h-8">
               <Download size={15} /> 匯出 JSON
             </button>
             <button onClick={handleExportTxt}
-              className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium px-3 py-1.5 rounded-lg transition-colors h-8">
+              className="max-md:hidden flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium px-3 py-1.5 rounded-lg transition-colors h-8">
               <Type size={15} /> 匯出 TXT
             </button>
             <button onClick={() => setShowTranslateTool(true)}
-              className="flex items-center gap-1.5 bg-stone-700 hover:bg-stone-600 text-stone-200 text-xs font-medium px-3 py-1.5 rounded-lg transition-colors h-8">
+              className="max-md:hidden flex items-center gap-1.5 bg-stone-700 hover:bg-stone-600 text-stone-200 text-xs font-medium px-3 py-1.5 rounded-lg transition-colors h-8">
               <Languages size={15} /> 翻譯工具
             </button>
+            <div className="md:hidden relative" ref={moreMenuRef}>
+              <button
+                onClick={() => setShowMoreMenu(prev => !prev)}
+                className="flex items-center justify-center w-8 h-8 rounded-lg hover:bg-stone-700 text-stone-400 transition-colors"
+              >
+                <MoreHorizontal size={18} />
+              </button>
+              {showMoreMenu && (
+                <div className="absolute right-0 top-full mt-1 w-44 bg-stone-800 border border-stone-700 rounded-xl shadow-2xl shadow-black/50 py-1 z-50 animate-slide-up">
+                  <button onClick={() => { handleExportJson(); setShowMoreMenu(false); }} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-stone-200 hover:bg-stone-700 transition-colors">
+                    <Download size={14} /> 匯出 JSON
+                  </button>
+                  <button onClick={() => { handleExportTxt(); setShowMoreMenu(false); }} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-stone-200 hover:bg-stone-700 transition-colors">
+                    <Type size={14} /> 匯出 TXT
+                  </button>
+                  <div className="h-px bg-stone-700 my-1" />
+                  <button onClick={() => { setShowTranslateTool(true); setShowMoreMenu(false); }} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-stone-200 hover:bg-stone-700 transition-colors">
+                    <Languages size={14} /> 翻譯工具
+                  </button>
+                </div>
+              )}
+            </div>
           </>
         )}
       </header>
 
-      <main className="flex-1 flex min-h-0">
-        <div className="w-[60%] flex flex-col min-h-0">
-        <div
-          ref={scrollRef}
-          className="flex-1 overflow-auto bg-stone-950"
-        >
-          {!dataLoaded && !globalLoading ? (
-            <BookGallery
-              datasets={availableDatasets}
-              onSelect={loadFromManifest}
-              imgInputRef={imgInputRef}
-              jsonInputRef={jsonInputRef}
-            />
-          ) : globalLoading ? (
-            <div className="h-full flex flex-col items-center justify-center text-stone-400 gap-3">
-              <Loader2 size={28} className="animate-spin text-indigo-400" />
-              <p className="text-sm">正在載入 PDF 文檔...</p>
-            </div>
-          ) : dataLoaded && containerWidth > 0 ? (
-            <>
-              {pagesData.map((pageData, idx) => (
-                <PageView
-                  key={idx}
-                  pageIndex={idx}
-                  pageData={pageData}
-                  pdfDoc={pdfDoc}
-                  containerWidth={containerWidth}
-                  uploadImageUrl={imageUrl}
-                  sourceType={sourceType}
-                   hoveredId={hoveredId}
-                   selectedId={selectedId}
-                   hoveredUids={hoveredUids}
-                   selectedUids={selectedUids}
-                   onBboxHover={handleBboxHover}
-                   onBboxLeave={handleBboxLeave}
-                   onBboxClick={handleBboxClick}
-                   preloadBound={preloadBound}
-                  onPageRendered={handlePageRendered}
-                  zoom={zoom}
-                />
-              ))}
+      <main className="flex-1 flex min-h-0 overflow-hidden">
+        {showMoreMenu && (
+          <div className="fixed inset-0 z-40" onClick={() => setShowMoreMenu(false)} />
+        )}
+        <div className="flex-1 flex flex-col min-h-0 min-w-0">
+          <div className="flex-1 flex flex-col md:flex-row min-h-0 min-w-0">
+            <div className={`flex flex-col min-h-0 relative ${
+              !dataLoaded
+                ? 'w-full flex'
+                : 'max-md:flex-1 max-md:w-full md:w-[60%] md:flex ' + (mobileTab === 'image' ? 'max-md:flex' : 'max-md:hidden')
+            }`}>
+              <div
+                ref={scrollRef}
+                className="flex-1 overflow-auto bg-stone-950"
+              >
+                {!dataLoaded && !globalLoading ? (
+                  <BookGallery
+                    datasets={availableDatasets}
+                    onSelect={loadFromManifest}
+                    imgInputRef={imgInputRef}
+                    jsonInputRef={jsonInputRef}
+                  />
+                ) : globalLoading ? (
+                  <div className="h-full flex flex-col items-center justify-center text-stone-400 gap-3">
+                    <Loader2 size={28} className="animate-spin text-indigo-400" />
+                    <p className="text-sm">正在載入 PDF 文檔...</p>
+                  </div>
+                ) : dataLoaded && containerWidth > 0 ? (
+                  <>
+                    {pagesData.map((pageData, idx) => (
+                      <PageView
+                        key={idx}
+                        pageIndex={idx}
+                        pageData={pageData}
+                        pdfDoc={pdfDoc}
+                        containerWidth={containerWidth}
+                        uploadImageUrl={imageUrl}
+                        sourceType={sourceType}
+                        hoveredId={hoveredId}
+                        selectedId={selectedId}
+                        hoveredUids={hoveredUids}
+                        selectedUids={selectedUids}
+                        onBboxHover={handleBboxHover}
+                        onBboxLeave={handleBboxLeave}
+                        onBboxClick={handleBboxClick}
+                        preloadBound={preloadBound}
+                        onPageRendered={handlePageRendered}
+                        zoom={zoom}
+                        onCopy={handleCopy}
+                      />
+                    ))}
+                  </>
+                ) : null}
+              </div>
 
-            </>
-            ) : null}
+              {dataLoaded && (
+                <footer className="h-12 shrink-0 flex items-center justify-center gap-2 md:gap-3 border-t border-stone-700 bg-stone-800/50 px-2 md:px-4 text-xs">
+                  <button
+                    onClick={() => {
+                      const next = Math.max(0, currentPage - 1);
+                      setCurrentPage(next);
+                      const el = scrollRef.current?.querySelector(`[data-page-index="${next}"]`);
+                      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }}
+                    disabled={currentPage === 0}
+                    className="flex items-center gap-1 px-1.5 md:px-2 py-1.5 rounded hover:bg-stone-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                  >
+                    <ChevronLeft size={16} />
+                    <span className="max-md:sr-only">上一頁</span>
+                  </button>
+
+                  <div className="flex items-center gap-1 md:gap-1.5">
+                    <input
+                      type="number"
+                      min={1}
+                      max={totalPages}
+                      value={currentPage + 1}
+                      onChange={e => {
+                        const val = parseInt(e.target.value, 10);
+                        if (!isNaN(val) && val >= 1 && val <= totalPages) {
+                          const idx = val - 1;
+                          setCurrentPage(idx);
+                          const el = scrollRef.current?.querySelector(`[data-page-index="${idx}"]`);
+                          if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        }
+                      }}
+                      className="w-10 md:w-12 bg-stone-700 border border-stone-600 rounded px-1 py-0.5 text-xs text-center text-stone-100 outline-none focus:border-indigo-500 transition-colors [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                    />
+                    <span className="text-stone-500">/ {totalPages}</span>
+                  </div>
+
+                  <button
+                    onClick={() => {
+                      const next = Math.min(totalPages - 1, currentPage + 1);
+                      setCurrentPage(next);
+                      const el = scrollRef.current?.querySelector(`[data-page-index="${next}"]`);
+                      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }}
+                    disabled={currentPage === totalPages - 1}
+                    className="flex items-center gap-1 px-1.5 md:px-2 py-1.5 rounded hover:bg-stone-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                  >
+                    <span className="max-md:sr-only">下一頁</span>
+                    <ChevronRight size={16} />
+                  </button>
+
+                  <div className="w-px h-5 bg-stone-700 max-md:hidden" />
+
+                  <button
+                    onClick={() => {
+                      setIsAutoFit(true);
+                      const el = scrollRef.current;
+                      if (el && pagesData.length > 0 && containerWidth) {
+                        const visibleHeight = el.clientHeight;
+                        const p0 = pagesData[0];
+                        const displayH = containerWidth * (p0.height / p0.width);
+                        setZoom(Math.min(1, visibleHeight / displayH));
+                      }
+                      scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+                    }}
+                    className="max-md:hidden flex items-center gap-1 px-2 py-1 rounded hover:bg-stone-700 transition-colors"
+                  >
+                    <RotateCcw size={14} /> 重置視角
+                  </button>
+
+                  <span className="text-stone-500 font-mono w-10 text-right max-md:hidden">{Math.round(zoom * 100)}%</span>
+                </footer>
+              )}
+            </div>
+
+            {dataLoaded && (
+              <aside className={`flex flex-col min-h-0 bg-stone-800/30 max-md:flex-1 max-md:w-full md:w-[40%] md:flex md:shrink-0 md:border-l md:border-stone-700 ${
+                mobileTab === 'text' ? 'max-md:flex' : 'max-md:hidden'
+              }`}>
+                <div className="h-10 flex items-center px-4 border-b border-stone-700 shrink-0 gap-2">
+                  <span className="text-xs font-medium text-stone-400">
+                    文字列表
+                    <span className="ml-2 text-stone-600">({allTextBlocks.length} 行)</span>
+                  </span>
+                  <div className="flex items-center gap-1.5 bg-indigo-600/15 border border-indigo-600/25 text-indigo-300 rounded px-1.5 py-0.5 text-[10px] font-medium shrink-0">
+                    <FileText size={11} />
+                    <span>第 {currentPage + 1} / {totalPages} 頁</span>
+                  </div>
+                  <div className="flex items-center gap-0.5 bg-stone-700/50 border border-stone-600/40 rounded-lg p-0.5 shrink-0">
+                    <button
+                      onClick={() => setDisplayMode('original')}
+                      className={`px-2 py-0.5 text-[10px] font-medium rounded-md transition-colors ${displayMode === 'original' ? 'bg-indigo-600 text-white shadow-sm' : 'text-stone-400 hover:text-stone-200'}`}
+                    >原文</button>
+                    <button
+                      onClick={() => setDisplayMode('both')}
+                      className={`px-2 py-0.5 text-[10px] font-medium rounded-md transition-colors ${displayMode === 'both' ? 'bg-indigo-600 text-white shadow-sm' : 'text-stone-400 hover:text-stone-200'}`}
+                    >雙語</button>
+                    <button
+                      onClick={() => setDisplayMode('translation')}
+                      className={`px-2 py-0.5 text-[10px] font-medium rounded-md transition-colors ${displayMode === 'translation' ? 'bg-indigo-600 text-white shadow-sm' : 'text-stone-400 hover:text-stone-200'}`}
+                    >翻譯</button>
+                  </div>
+                  <div className="flex-1" />
+                  <span className="text-[10px] text-stone-500 max-md:hidden">懸停/點擊可雙向同步</span>
+                </div>
+
+                <div className="flex items-center gap-1.5 px-3 py-1.5 border-b border-stone-700 shrink-0">
+                  <div className="flex items-center gap-1 flex-1 bg-stone-700/50 border border-stone-600 rounded px-2 py-1">
+                    <Search size={13} className="text-stone-500 shrink-0" />
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={e => { setSearchQuery(e.target.value); setSearchIdx(-1); }}
+                      placeholder="搜尋區塊文字..."
+                      className="flex-1 bg-transparent text-xs text-stone-100 outline-none placeholder:text-stone-500 min-w-0"
+                      onKeyDown={e => {
+                        if (e.key === 'Enter' && searchResults.length > 0) {
+                          e.preventDefault();
+                          const nextIdx = searchIdx + 1 >= searchResults.length ? 0 : searchIdx + 1;
+                          setSearchIdx(nextIdx);
+                          handleTextClick(searchResults[nextIdx]);
+                        }
+                      }}
+                    />
+                    {searchQuery && (
+                      <button onClick={() => { setSearchQuery(''); setDebouncedSearchQuery(''); setSearchIdx(-1); }} className="text-stone-500 hover:text-stone-300 shrink-0">
+                        <X size={13} />
+                      </button>
+                    )}
+                  </div>
+                  {searchResults.length > 0 && (
+                    <>
+                      <button
+                        onClick={() => {
+                          const prev = searchIdx <= 0 ? searchResults.length - 1 : searchIdx - 1;
+                          setSearchIdx(prev);
+                          handleTextClick(searchResults[prev]);
+                        }}
+                        className="text-stone-500 hover:text-stone-200 disabled:opacity-30 shrink-0"
+                        title="上一個"
+                      >
+                        <ChevronUp size={14} />
+                      </button>
+                      <button
+                        onClick={() => {
+                          const next = searchIdx + 1 >= searchResults.length ? 0 : searchIdx + 1;
+                          setSearchIdx(next);
+                          handleTextClick(searchResults[next]);
+                        }}
+                        className="text-stone-500 hover:text-stone-200 disabled:opacity-30 shrink-0"
+                        title="下一個"
+                      >
+                        <ChevronDown size={14} />
+                      </button>
+                      <span className="text-[10px] font-mono text-stone-500 shrink-0 whitespace-nowrap">
+                        {searchIdx >= 0 ? `${searchIdx + 1}/${searchResults.length}` : `${searchResults.length} 筆`}
+                      </span>
+                    </>
+                  )}
+                </div>
+
+                <div ref={textListRef} className="flex-1 overflow-y-auto scroll-smooth">
+                  {rows}
+                </div>
+                <div className="h-7 shrink-0 flex items-center gap-2 px-3 border-t border-stone-700 bg-stone-800/40 text-[10px] font-mono">
+                  {infoBlock ? (
+                    <>
+                      <span className="text-stone-400">label:</span>
+                      <span className="text-stone-200 font-semibold">{infoBlock.block_label}</span>
+                      {infoBlock.block_bbox && (
+                        <>
+                          <span className="text-stone-600">|</span>
+                          <span className="text-stone-400">pos:</span>
+                          <span className="text-stone-200">{Math.round(infoBlock.block_bbox[0])},{Math.round(infoBlock.block_bbox[1])}</span>
+                        </>
+                      )}
+                      <span className="text-stone-600">|</span>
+                      <span className="text-stone-400">id:</span>
+                      <span className="text-stone-500">{infoBlock.block_id}</span>
+                    </>
+                  ) : (
+                    <span className="text-stone-600 italic">懸停或選取區塊以查看詳細資訊</span>
+                  )}
+                </div>
+              </aside>
+            )}
           </div>
 
           {dataLoaded && (
-            <footer className="h-12 shrink-0 flex items-center justify-center gap-3 border-t border-stone-700 bg-stone-800/50 px-4 text-xs">
+            <div className="md:hidden flex shrink-0 h-12 border-t border-stone-700 bg-stone-800">
               <button
-                onClick={() => {
-                  const next = Math.max(0, currentPage - 1);
-                  setCurrentPage(next);
-                  const el = scrollRef.current?.querySelector(`[data-page-index="${next}"]`);
-                  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                }}
-                disabled={currentPage === 0}
-                className="flex items-center gap-1 px-2 py-1 rounded hover:bg-stone-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                onClick={() => handleMobileTabChange('image')}
+                className={`flex-1 flex items-center justify-center gap-1.5 text-xs font-medium transition-colors ${
+                  mobileTab === 'image'
+                    ? 'text-indigo-400 border-t-2 border-indigo-400 bg-indigo-400/5'
+                    : 'text-stone-500 hover:text-stone-300'
+                }`}
               >
-                <ChevronLeft size={16} /> 上一頁
+                <FileText size={15} />
+                檢視
               </button>
-
-              <div className="flex items-center gap-1.5">
-                <input
-                  type="number"
-                  min={1}
-                  max={totalPages}
-                  value={currentPage + 1}
-                  onChange={e => {
-                    const val = parseInt(e.target.value, 10);
-                    if (!isNaN(val) && val >= 1 && val <= totalPages) {
-                      const idx = val - 1;
-                      setCurrentPage(idx);
-                      const el = scrollRef.current?.querySelector(`[data-page-index="${idx}"]`);
-                      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                    }
-                  }}
-                  className="w-12 bg-stone-700 border border-stone-600 rounded px-1 py-0.5 text-xs text-center text-stone-100 outline-none focus:border-indigo-500 transition-colors [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                />
-                <span className="text-stone-500">/ {totalPages}</span>
-              </div>
-
               <button
-                onClick={() => {
-                  const next = Math.min(totalPages - 1, currentPage + 1);
-                  setCurrentPage(next);
-                  const el = scrollRef.current?.querySelector(`[data-page-index="${next}"]`);
-                  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                }}
-                disabled={currentPage === totalPages - 1}
-                className="flex items-center gap-1 px-2 py-1 rounded hover:bg-stone-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                onClick={() => handleMobileTabChange('text')}
+                className={`flex-1 flex items-center justify-center gap-1.5 text-xs font-medium transition-colors ${
+                  mobileTab === 'text'
+                    ? 'text-indigo-400 border-t-2 border-indigo-400 bg-indigo-400/5'
+                    : 'text-stone-500 hover:text-stone-300'
+                }`}
               >
-                下一頁 <ChevronRight size={16} />
+                <Type size={15} />
+                文字
               </button>
-
-              <div className="w-px h-5 bg-stone-700" />
-
-              <button
-                onClick={() => {
-                  setIsAutoFit(true);
-                  const el = scrollRef.current;
-                  if (el && pagesData.length > 0 && containerWidth) {
-                    const visibleHeight = el.clientHeight;
-                    const p0 = pagesData[0];
-                    const displayH = containerWidth * (p0.height / p0.width);
-                    setZoom(Math.min(1, visibleHeight / displayH));
-                  }
-                  scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
-                }}
-                className="flex items-center gap-1 px-2 py-1 rounded hover:bg-stone-700 transition-colors"
-              >
-                <RotateCcw size={14} /> 重置視角
-              </button>
-
-              <span className="text-stone-500 font-mono w-10 text-right">{Math.round(zoom * 100)}%</span>
-            </footer>
+            </div>
           )}
-          </div>
-
-        {dataLoaded && (
-          <aside className="w-[40%] shrink-0 border-l border-stone-700 flex flex-col bg-stone-800/30">
-            <div className="h-10 flex items-center px-4 border-b border-stone-700 shrink-0 gap-2">
-              <span className="text-xs font-medium text-stone-400">
-                文字列表
-                <span className="ml-2 text-stone-600">({allTextBlocks.length} 行)</span>
-              </span>
-              <div className="flex items-center gap-1.5 bg-indigo-600/15 border border-indigo-600/25 text-indigo-300 rounded px-1.5 py-0.5 text-[10px] font-medium shrink-0">
-                <FileText size={11} />
-                <span>第 {currentPage + 1} / {totalPages} 頁</span>
-              </div>
-              <div className="flex items-center gap-0.5 bg-stone-700/50 border border-stone-600/40 rounded-lg p-0.5 shrink-0">
-                <button
-                  onClick={() => setDisplayMode('original')}
-                  className={`px-2 py-0.5 text-[10px] font-medium rounded-md transition-colors ${displayMode === 'original' ? 'bg-indigo-600 text-white shadow-sm' : 'text-stone-400 hover:text-stone-200'}`}
-                >原文</button>
-                <button
-                  onClick={() => setDisplayMode('both')}
-                  className={`px-2 py-0.5 text-[10px] font-medium rounded-md transition-colors ${displayMode === 'both' ? 'bg-indigo-600 text-white shadow-sm' : 'text-stone-400 hover:text-stone-200'}`}
-                >雙語</button>
-                <button
-                  onClick={() => setDisplayMode('translation')}
-                  className={`px-2 py-0.5 text-[10px] font-medium rounded-md transition-colors ${displayMode === 'translation' ? 'bg-indigo-600 text-white shadow-sm' : 'text-stone-400 hover:text-stone-200'}`}
-                >翻譯</button>
-              </div>
-              <div className="flex-1" />
-              <span className="text-[10px] text-stone-500">懸停/點擊可雙向同步</span>
-            </div>
-
-            <div className="flex items-center gap-1.5 px-3 py-1.5 border-b border-stone-700 shrink-0">
-              <div className="flex items-center gap-1 flex-1 bg-stone-700/50 border border-stone-600 rounded px-2 py-1">
-                <Search size={13} className="text-stone-500 shrink-0" />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={e => { setSearchQuery(e.target.value); setSearchIdx(-1); }}
-                  placeholder="搜尋區塊文字..."
-                  className="flex-1 bg-transparent text-xs text-stone-100 outline-none placeholder:text-stone-500 min-w-0"
-                  onKeyDown={e => {
-                    if (e.key === 'Enter' && searchResults.length > 0) {
-                      e.preventDefault();
-                      const nextIdx = searchIdx + 1 >= searchResults.length ? 0 : searchIdx + 1;
-                      setSearchIdx(nextIdx);
-                      handleTextClick(searchResults[nextIdx]);
-                    }
-                  }}
-                />
-                {searchQuery && (
-                  <button onClick={() => { setSearchQuery(''); setDebouncedSearchQuery(''); setSearchIdx(-1); }} className="text-stone-500 hover:text-stone-300 shrink-0">
-                    <X size={13} />
-                  </button>
-                )}
-              </div>
-              {searchResults.length > 0 && (
-                <>
-                  <button
-                    onClick={() => {
-                      const prev = searchIdx <= 0 ? searchResults.length - 1 : searchIdx - 1;
-                      setSearchIdx(prev);
-                      handleTextClick(searchResults[prev]);
-                    }}
-                    className="text-stone-500 hover:text-stone-200 disabled:opacity-30 shrink-0"
-                    title="上一個"
-                  >
-                    <ChevronUp size={14} />
-                  </button>
-                  <button
-                    onClick={() => {
-                      const next = searchIdx + 1 >= searchResults.length ? 0 : searchIdx + 1;
-                      setSearchIdx(next);
-                      handleTextClick(searchResults[next]);
-                    }}
-                    className="text-stone-500 hover:text-stone-200 disabled:opacity-30 shrink-0"
-                    title="下一個"
-                  >
-                    <ChevronDown size={14} />
-                  </button>
-                  <span className="text-[10px] font-mono text-stone-500 shrink-0 whitespace-nowrap">
-                    {searchIdx >= 0 ? `${searchIdx + 1}/${searchResults.length}` : `${searchResults.length} 筆`}
-                  </span>
-                </>
-              )}
-            </div>
-
-            <div ref={textListRef} className="flex-1 overflow-y-auto scroll-smooth">
-              {rows}
-            </div>
-            <div className="h-7 shrink-0 flex items-center gap-2 px-3 border-t border-stone-700 bg-stone-800/40 text-[10px] font-mono">
-              {infoBlock ? (
-                <>
-                  <span className="text-stone-400">label:</span>
-                  <span className="text-stone-200 font-semibold">{infoBlock.block_label}</span>
-                  {infoBlock.block_bbox && (
-                    <>
-                      <span className="text-stone-600">|</span>
-                      <span className="text-stone-400">pos:</span>
-                      <span className="text-stone-200">{Math.round(infoBlock.block_bbox[0])},{Math.round(infoBlock.block_bbox[1])}</span>
-                    </>
-                  )}
-                  <span className="text-stone-600">|</span>
-                  <span className="text-stone-400">id:</span>
-                  <span className="text-stone-500">{infoBlock.block_id}</span>
-                </>
-              ) : (
-                <span className="text-stone-600 italic">懸停或選取區塊以查看詳細資訊</span>
-              )}
-            </div>
-          </aside>
-        )}
+        </div>
       </main>
     </div>
   );

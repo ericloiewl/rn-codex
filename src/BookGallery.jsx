@@ -54,13 +54,13 @@ export default function BookGallery({ datasets, onSelect, imgInputRef, jsonInput
       <div className="flex gap-3">
         <button
           onClick={() => imgInputRef.current?.click()}
-          className="flex items-center gap-1.5 bg-stone-700 hover:bg-stone-600 text-stone-300 text-xs font-medium px-4 py-2 rounded-lg transition-colors"
+          className="flex items-center gap-1.5 bg-stone-700 hover:bg-stone-600 text-stone-300 text-xs font-medium px-4 py-2.5 md:py-2 rounded-lg transition-colors"
         >
           <Upload size={14} /> 選擇檔案
         </button>
         <button
           onClick={() => jsonInputRef.current?.click()}
-          className="flex items-center gap-1.5 bg-stone-700 hover:bg-stone-600 text-stone-300 text-xs font-medium px-4 py-2 rounded-lg transition-colors"
+          className="flex items-center gap-1.5 bg-stone-700 hover:bg-stone-600 text-stone-300 text-xs font-medium px-4 py-2.5 md:py-2 rounded-lg transition-colors"
         >
           <FileJson size={14} /> 選擇 JSON
         </button>

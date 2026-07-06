@@ -1,8 +1,14 @@
 [
   {
-    "name": "15001",
-    "pdf": "/rn-codex/PDFs/15001.pdf",
-    "json": "/rn-codex/JSONs/15001.json",
+    "name": "Código do Registo Predial",
+    "pdf": "/rn-codex/PDFs/Código_do_Registo_Predial.pdf",
+    "json": "/rn-codex/JSONs/Código_do_Registo_Predial.json",
+    "thumbnail": null
+  },
+  {
+    "name": "Código do Notariado",
+    "pdf": "/rn-codex/PDFs/Código_do_Notariado.pdf",
+    "json": "/rn-codex/JSONs/Código_do_Notariado.json",
     "thumbnail": null
   }
 ]
