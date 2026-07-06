@@ -5,12 +5,27 @@ import {
   File as FileIcon, Loader2,   ChevronLeft, ChevronRight, ChevronUp, ChevronDown
 } from 'lucide-react';
 import * as pdfjsLib from 'pdfjs-dist';
-import { lexer, parser } from 'marked';
+import { lexer, parser, use as markedUse } from 'marked';
+import katex from 'katex';
+import 'katex/dist/katex.min.css';
+import markedKatex from 'marked-katex-extension';
+markedUse(markedKatex({ throwOnError: false }));
 import TranslateTool from './TranslateTool';
+import BookGallery from './BookGallery';
 
 const PRELOAD_COUNT = 3;
 const PDF_WORKER_URL = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString();
 pdfjsLib.GlobalWorkerOptions.workerSrc = PDF_WORKER_URL;
+
+const renderMathInHtml = (html) => {
+  return html.replace(/\$\$([\s\S]*?)\$\$/g, (_, expr) => {
+    try { return katex.renderToString(expr.trim(), { displayMode: true, throwOnError: false }); }
+    catch { return `$$${expr}$$`; }
+  }).replace(/\$([^$]*?)\$/g, (_, expr) => {
+    try { return katex.renderToString(expr.trim(), { displayMode: false, throwOnError: false }); }
+    catch { return `$${expr}$`; }
+  });
+};
 
 function Toast({ message, type, onClose }) {
   useEffect(() => {
@@ -223,7 +238,7 @@ const TextRow = memo(({ id, index, currentText, isEdited, isHtml, blockLabel, is
                       return (
                         <div className="bg-stone-700/30 border border-stone-600/50 rounded overflow-x-auto">
                           <div className="px-2 py-1 text-[10px] text-stone-500 bg-stone-700/50 border-b border-stone-600/50">table</div>
-                          <div className="p-2 text-xs [&_table]:w-full [&_table]:border-collapse [&_td]:border [&_td]:border-stone-600 [&_td]:px-2 [&_td]:py-1 [&_th]:border [&_th]:border-stone-600 [&_th]:px-2 [&_th]:py-1" dangerouslySetInnerHTML={{ __html: currentText }} />
+                          <div className="p-2 text-xs [&_table]:w-full [&_table]:border-collapse [&_td]:border [&_td]:border-stone-600 [&_td]:px-2 [&_td]:py-1 [&_th]:border [&_th]:border-stone-600 [&_th]:px-2 [&_th]:py-1" dangerouslySetInnerHTML={{ __html: renderMathInHtml(currentText) }} />
                         </div>
                       );
                     default:
@@ -323,6 +338,14 @@ function App() {
   const [showTranslateTool, setShowTranslateTool] = useState(false);
   const [translationMap, setTranslationMap] = useState(() => new Map());
   const [displayMode, setDisplayMode] = useState('both');
+  const [availableDatasets, setAvailableDatasets] = useState([]);
+
+  useEffect(() => {
+    fetch('/manifest.json')
+      .then(r => r.json())
+      .then(data => setAvailableDatasets(Array.isArray(data) ? data : []))
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearchQuery(searchQuery), 500);
@@ -341,6 +364,41 @@ function App() {
 
   const showToast = useCallback((message, type = 'error') => setToast({ message, type }), []);
   const closeToast = useCallback(() => setToast(null), []);
+
+  const loadFromManifest = useCallback(async (entry) => {
+    setGlobalLoading(true);
+    try {
+      const jsonResp = await fetch(entry.json);
+      if (!jsonResp.ok) throw new Error(`JSON 載入失敗 (${jsonResp.status})`);
+      const jsonData = await jsonResp.json();
+      const parsed = parseOcrJson(jsonData);
+
+      const pdfResp = await fetch(entry.pdf);
+      if (!pdfResp.ok) throw new Error(`PDF 載入失敗 (${pdfResp.status})`);
+      const pdfBlob = await pdfResp.blob();
+      const pdfFile = new File([pdfBlob], `${entry.name}.pdf`, { type: 'application/pdf' });
+
+      const jsonFile = new File([JSON.stringify(jsonData)], `${entry.name}.json`, { type: 'application/json' });
+
+      pdfProcessedRef.current = false;
+      setImageFile(pdfFile);
+      setJsonFile(jsonFile);
+      setSourceType('pdf');
+      setPagesData(parsed.pages);
+      setRawJson(parsed.raw);
+      setEdits({});
+      setHoveredId(null);
+      setSelectedId(null);
+      setDataLoaded(false);
+      setPreloadBound(PRELOAD_COUNT - 1);
+      setZoom(1);
+      setIsAutoFit(true);
+    } catch (err) {
+      showToast(`載入範例失敗：${err.message}`);
+    } finally {
+      setGlobalLoading(false);
+    }
+  }, [showToast]);
 
   const totalPages = pagesData.length;
 
@@ -824,20 +882,12 @@ function App() {
           className="flex-1 overflow-auto bg-stone-950"
         >
           {!dataLoaded && !globalLoading ? (
-            <div className="h-full flex flex-col items-center justify-center text-stone-500 gap-4">
-              <Upload size={48} className="text-stone-600" />
-              <p className="text-sm">請上傳原始檔案（圖片/PDF）與 PaddleOCR JSON 以開始檢視</p>
-              <div className="flex gap-3 mt-1">
-                <button onClick={() => imgInputRef.current?.click()}
-                  className="flex items-center gap-1.5 bg-stone-700 hover:bg-stone-600 text-stone-300 text-xs px-4 py-2 rounded-lg">
-                  {renderSourceIcon()} 選擇檔案
-                </button>
-                <button onClick={() => jsonInputRef.current?.click()}
-                  className="flex items-center gap-1.5 bg-stone-700 hover:bg-stone-600 text-stone-300 text-xs px-4 py-2 rounded-lg">
-                  <FileJson size={14} /> 選擇 JSON
-                </button>
-              </div>
-            </div>
+            <BookGallery
+              datasets={availableDatasets}
+              onSelect={loadFromManifest}
+              imgInputRef={imgInputRef}
+              jsonInputRef={jsonInputRef}
+            />
           ) : globalLoading ? (
             <div className="h-full flex flex-col items-center justify-center text-stone-400 gap-3">
               <Loader2 size={28} className="animate-spin text-indigo-400" />
