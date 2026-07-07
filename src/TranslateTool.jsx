@@ -1,5 +1,5 @@
 import { useState, useMemo, useRef } from 'react';
-import { Download, Upload, X, CheckCircle2, Languages } from 'lucide-react';
+import { Copy, Download, Upload, X, CheckCircle2, Languages } from 'lucide-react';
 
 function extractEntries(rawJson) {
   const entries = [];
@@ -57,6 +57,24 @@ export default function TranslateTool({ rawJson, translationMap, setTranslationM
     a.click();
     URL.revokeObjectURL(url);
     showToast('已下載 to_translate.json', 'success');
+  };
+
+  const handleCopyPrompt = () => {
+    const prompt = `你是一位專業的1930年的葡文法律專家，請將以下的葡文法典JSON翻譯成中文：
+
+每筆資料結構：
+- key: 唯一識別碼（請保留不變）
+- src: 待翻譯原文（葡文）
+
+請將附檔 (to_translate.json) 中的 src 欄位全部翻譯成中文，保留 key 不變。
+
+請回傳 JSON 陣列，格式如下（只回傳此陣列，不要其他文字）：
+[
+  { "key": "0_1", "dst": "翻譯結果" },
+  { "key": "0_2", "dst": "翻譯結果" }
+]`;
+    navigator.clipboard.writeText(prompt);
+    showToast('已複製 LLM Prompt', 'success');
   };
 
   const handleUploadTranslations = (file) => {
@@ -128,6 +146,13 @@ export default function TranslateTool({ rawJson, translationMap, setTranslationM
                 className="w-full flex items-center justify-center gap-1.5 bg-amber-600 hover:bg-amber-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-medium px-3 py-2 rounded-lg transition-colors"
               >
                 <Download size={14} /> 下載 to_translate.json
+              </button>
+              <button
+                onClick={handleCopyPrompt}
+                disabled={entries.length === 0}
+                className="w-full flex items-center justify-center gap-1.5 bg-stone-700 hover:bg-stone-600 disabled:opacity-40 disabled:cursor-not-allowed text-stone-200 text-xs font-medium px-3 py-2 rounded-lg transition-colors"
+              >
+                <Copy size={14} /> 複製 LLM Prompt
               </button>
             </div>
           </div>
