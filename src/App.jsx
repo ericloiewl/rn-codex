@@ -725,8 +725,10 @@ function App() {
   const handleBboxClick = useCallback((block, pageIndex) => {
     const id = uid(pageIndex, block.block_id);
     setSelectedId(id);
-    const row = textListRef.current?.querySelector(`[data-uid="${id}"]`);
-    if (row) row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    requestAnimationFrame(() => {
+      const row = textListRef.current?.querySelector(`[data-uid="${id}"]`);
+      if (row) row.scrollIntoView({ behavior: 'auto', block: 'center' });
+    });
   }, [uid]);
 
   const handleTextHover = useCallback((id) => setHoveredId(id), []);
@@ -737,11 +739,15 @@ function App() {
     const pageIndex = parseInt(pageStr, 10);
     if (!isNaN(pageIndex)) {
       setCurrentPage(pageIndex);
-      const el = scrollRef.current?.querySelector(`[data-page-index="${pageIndex}"]`);
-      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
-    const row = textListRef.current?.querySelector(`[data-uid="${id}"]`);
-    if (row) row.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    requestAnimationFrame(() => {
+      if (!isNaN(pageIndex)) {
+        const el = scrollRef.current?.querySelector(`[data-page-index="${pageIndex}"]`);
+        if (el) el.scrollIntoView({ behavior: 'auto', block: 'start' });
+      }
+      const row = textListRef.current?.querySelector(`[data-uid="${id}"]`);
+      if (row) row.scrollIntoView({ behavior: 'auto', block: 'nearest' });
+    });
   }, []);
 
   const handleEditChange = useCallback((id, text) => {
@@ -1219,7 +1225,7 @@ function App() {
                   )}
                 </div>
 
-                <div ref={textListRef} className="flex-1 overflow-y-auto scroll-smooth">
+                <div ref={textListRef} className="flex-1 overflow-y-auto">
                   {rows}
                 </div>
                 <div className="h-7 shrink-0 flex items-center gap-2 px-3 border-t border-stone-700 bg-stone-800/40 text-[10px] font-mono">
