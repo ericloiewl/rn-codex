@@ -192,9 +192,11 @@ function PageView({ pageIndex, pageData, pdfDoc, containerWidth, uploadImageUrl,
               {pageData.blocks.map(block => (
                 <polygon
                   key={block.block_id}
+                  data-uid={uid(block.block_id)}
+                  data-page-index={pageIndex}
                   points={bboxToSvg(block.block_polygon_points)}
                   className={getBlockStyle(uid(block.block_id))}
-                  fillRule="evenodd"
+                  fillRule="even"
                   onMouseEnter={e => onBboxHover(block, e, pageIndex)}
                   onMouseLeave={onBboxLeave}
                   onClick={() => onBboxClick(block, pageIndex)}
@@ -297,7 +299,7 @@ const TextRow = memo(({ id, index, currentText, isEdited, isHtml, blockLabel, is
               ) : (
                 <div className="flex items-center gap-1 group">
                   <span
-                    className="flex-1 leading-relaxed mark-up [&_h1]:text-lg [&_h1]:font-bold [&_h1]:text-stone-100 [&_h2]:text-base [&_h2]:font-bold [&_h2]:text-stone-100 [&_h3]:text-sm [&_h3]:font-bold [&_h3]:text-stone-100 [&_h4]:text-xs [&_h4]:font-bold [&_h4]:text-stone-200 [&_h5]:text-xs [&_h5]:font-semibold [&_h5]:text-stone-200 [&_h6]:text-xs [&_h6]:font-semibold [&_h6]:text-stone-300 [&_p]:m-0 [&_p]:inline [&_strong]:font-semibold [&_strong]:text-stone-100 [&_em]:italic [&_code]:bg-stone-700 [&_code]:px-1 [&_code]:rounded [&_code]:text-[10px] [&_pre]:bg-stone-700 [&_pre]:p-2 [&_pre]:rounded [&_pre]:overflow-x-auto [&_pre]:my-1 [&_ul]:list-disc [&_ul]:pl-4 [&_ol]:list-decimal [&_ol]:pl-4 [&_li]:my-0.5 [&_a]:text-indigo-400 [&_a]:underline [&_blockquote]:border-l-2 [&_blockquote]:border-stone-500 [&_blockquote]:pl-2 [&_blockquote]:text-stone-400 [&_hr]:border-stone-600 [&_hr]:my-1"
+                    className="flex-1 min-w-0 leading-relaxed mark-up [&_h1]:text-lg [&_h1]:font-bold [&_h1]:text-stone-100 [&_h2]:text-base [&_h2]:font-bold [&_h2]:text-stone-100 [&_h3]:text-sm [&_h3]:font-bold [&_h3]:text-stone-100 [&_h4]:text-xs [&_h4]:font-bold [&_h4]:text-stone-200 [&_h5]:text-xs [&_h5]:font-semibold [&_h5]:text-stone-200 [&_h6]:text-xs [&_h6]:font-semibold [&_h6]:text-stone-300 [&_p]:m-0 [&_p]:inline [&_strong]:font-semibold [&_strong]:text-stone-100 [&_em]:italic [&_code]:bg-stone-700 [&_code]:px-1 [&_code]:rounded [&_code]:text-[10px] [&_pre]:bg-stone-700 [&_pre]:p-2 [&_pre]:rounded [&_pre]:overflow-x-auto [&_pre]:my-1 [&_ul]:list-disc [&_ul]:pl-4 [&_ol]:list-decimal [&_ol]:pl-4 [&_li]:my-0.5 [&_a]:text-indigo-400 [&_a]:underline [&_blockquote]:border-l-2 [&_blockquote]:border-stone-500 [&_blockquote]:pl-2 [&_blockquote]:text-stone-400 [&_hr]:border-stone-600 [&_hr]:my-1"
                     dangerouslySetInnerHTML={{
                       __html: isSearchMatch && searchQuery
                         ? parser(lexer(currentText.replace(
@@ -332,7 +334,7 @@ const TextRow = memo(({ id, index, currentText, isEdited, isHtml, blockLabel, is
                   {displayMode === 'both' && <div className="my-1.5 border-t border-stone-600/40" />}
                   <div className="text-xs leading-relaxed">
                     <span
-                      className="flex-1 leading-relaxed text-emerald-400 [&_h1]:text-lg [&_h1]:font-bold [&_h1]:text-emerald-100 [&_h2]:text-base [&_h2]:font-bold [&_h2]:text-emerald-100 [&_h3]:text-sm [&_h3]:font-bold [&_h3]:text-emerald-100 [&_h4]:text-xs [&_h4]:font-bold [&_h4]:text-emerald-200 [&_h5]:text-xs [&_h5]:font-semibold [&_h5]:text-emerald-200 [&_h6]:text-xs [&_h6]:font-semibold [&_h6]:text-emerald-300 [&_p]:m-0 [&_p]:inline [&_p]:text-emerald-400 [&_strong]:font-semibold [&_strong]:text-emerald-100 [&_em]:italic [&_code]:bg-stone-800 [&_code]:px-1 [&_code]:rounded [&_code]:text-[10px] [&_pre]:bg-stone-800 [&_pre]:p-2 [&_pre]:rounded [&_pre]:overflow-x-auto [&_pre]:my-1 [&_pre]:text-emerald-300 [&_ul]:list-disc [&_ul]:pl-4 [&_ol]:list-decimal [&_ol]:pl-4 [&_li]:my-0.5 [&_li]:text-emerald-400 [&_a]:text-emerald-300 [&_a]:underline [&_blockquote]:border-l-2 [&_blockquote]:border-emerald-700 [&_blockquote]:pl-2 [&_blockquote]:text-emerald-400 [&_hr]:border-emerald-700 [&_hr]:my-1"
+                      className="flex-1 min-w-0 leading-relaxed text-emerald-400 [&_h1]:text-lg [&_h1]:font-bold [&_h1]:text-emerald-100 [&_h2]:text-base [&_h2]:font-bold [&_h2]:text-emerald-100 [&_h3]:text-sm [&_h3]:font-bold [&_h3]:text-emerald-100 [&_h4]:text-xs [&_h4]:font-bold [&_h4]:text-emerald-200 [&_h5]:text-xs [&_h5]:font-semibold [&_h5]:text-emerald-200 [&_h6]:text-xs [&_h6]:font-semibold [&_h6]:text-emerald-300 [&_p]:m-0 [&_p]:inline [&_p]:text-emerald-400 [&_strong]:font-semibold [&_strong]:text-emerald-100 [&_em]:italic [&_code]:bg-stone-800 [&_code]:px-1 [&_code]:rounded [&_code]:text-[10px] [&_pre]:bg-stone-800 [&_pre]:p-2 [&_pre]:rounded [&_pre]:overflow-x-auto [&_pre]:my-1 [&_pre]:text-emerald-300 [&_ul]:list-disc [&_ul]:pl-4 [&_ol]:list-decimal [&_ol]:pl-4 [&_li]:my-0.5 [&_li]:text-emerald-400 [&_a]:text-emerald-300 [&_a]:underline [&_blockquote]:border-l-2 [&_blockquote]:border-emerald-700 [&_blockquote]:pl-2 [&_blockquote]:text-emerald-400 [&_hr]:border-emerald-700 [&_hr]:my-1"
                       dangerouslySetInnerHTML={{ __html: parser(lexer(translatedText)) }}
                     />
                   </div>
@@ -416,6 +418,8 @@ function App() {
   const pdfProcessedRef = useRef(false);
   const moreMenuRef = useRef(null);
   const savedScrollTop = useRef(0);
+  const pendingBlockTargetRef = useRef(null);
+  const pendingTextTargetRef = useRef(null);
 
   const showToast = useCallback((message, type = 'error') => setToast({ message, type }), []);
   const handleCopy = useCallback(async (text) => {
@@ -661,6 +665,20 @@ function App() {
     if (mobileTab === 'image' && scrollRef.current) {
       scrollRef.current.scrollTop = savedScrollTop.current;
     }
+    if (mobileTab === 'image' && pendingBlockTargetRef.current) {
+      requestAnimationFrame(() => {
+        const polygon = scrollRef.current?.querySelector(`[data-uid="${pendingBlockTargetRef.current}"]`);
+        if (polygon) polygon.scrollIntoView({ behavior: 'auto', block: 'center' });
+        pendingBlockTargetRef.current = null;
+      });
+    }
+    if (mobileTab === 'text' && pendingTextTargetRef.current) {
+      requestAnimationFrame(() => {
+        const row = textListRef.current?.querySelector(`[data-uid="${pendingTextTargetRef.current}"]`);
+        if (row) row.scrollIntoView({ behavior: 'auto', block: 'center' });
+        pendingTextTargetRef.current = null;
+      });
+    }
   }, [mobileTab]);
 
   useEffect(() => {
@@ -725,6 +743,7 @@ function App() {
   const handleBboxClick = useCallback((block, pageIndex) => {
     const id = uid(pageIndex, block.block_id);
     setSelectedId(id);
+    pendingTextTargetRef.current = id;
     requestAnimationFrame(() => {
       const row = textListRef.current?.querySelector(`[data-uid="${id}"]`);
       if (row) row.scrollIntoView({ behavior: 'auto', block: 'center' });
@@ -735,6 +754,7 @@ function App() {
   const handleTextLeave = useCallback(() => setHoveredId(null), []);
   const handleTextClick = useCallback((id) => {
     setSelectedId(id);
+    pendingBlockTargetRef.current = id;
     const [pageStr] = id.split(':');
     const pageIndex = parseInt(pageStr, 10);
     if (!isNaN(pageIndex)) {
