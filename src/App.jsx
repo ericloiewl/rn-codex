@@ -919,7 +919,7 @@ function App() {
   }, [pagesData, totalPages, uid, edits, hoveredUids, selectedUids, searchMatchSet, displayMode, handleTextHover, handleTextLeave, handleTextClick, handleEditChange, renderedHtml, debouncedSearchQuery]);
 
   return (
-    <div className="h-screen w-screen flex flex-col bg-stone-900 text-stone-200 overflow-hidden select-none">
+    <div className="h-dvh w-screen flex flex-col bg-stone-900 text-stone-200 overflow-hidden select-none">
       {toast && <Toast message={toast.message} type={toast.type} onClose={closeToast} />}
       {showTranslateTool && (
         <TranslateTool
